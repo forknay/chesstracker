@@ -68,9 +68,17 @@ body {
 }
 #panel-roster { grid-column: 1; grid-row: 1; }
 #panel-charts { grid-column: 2; grid-row: 1; }
-#panel-games { grid-column: 3; grid-row: 1; }
 #panel-ratings { grid-column: 1 / span 2; grid-row: 2; }
-#panel-performance { grid-column: 3; grid-row: 2; }
+#panel-top-right {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+#panel-games { grid-column: 3; grid-row: 2; }
 
 /* ===== PANELS ===== */
 .panel {
@@ -208,6 +216,40 @@ body {
 .game-players { font-size: 11px; margin-bottom: 2px; }
 .game-result { font-weight: bold; font-size: 11px; }
 
+/* ===== OVERVIEW ===== */
+.overview-body {
+  height: 100%;
+  display: flex;
+}
+.overview-line {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 14px;
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(22, 27, 34, 0.95), rgba(15, 20, 25, 0.95));
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.overview-line:hover { border-color: var(--border-bright); background: var(--bg-row-hover); }
+.overview-player { color: var(--cyan); font-weight: bold; }
+.overview-accent { color: var(--amber); font-weight: bold; }
+.overview-good { color: var(--green); font-weight: bold; }
+.overview-bad { color: var(--red); font-weight: bold; }
+.overview-meta {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
 /* ===== CHART TABS ===== */
 #chart-tabs, #chart-range-tabs { display: flex; gap: 2px; }
 .tab {
@@ -282,10 +324,15 @@ body {
     grid-template-rows: auto;
     overflow-y: auto;
   }
-  #panel-roster, #panel-ratings, #panel-games, #panel-charts, #panel-performance {
+  #panel-roster, #panel-ratings, #panel-charts, #panel-top-right, #panel-games {
     grid-column: 1;
     min-height: 280px;
   }
+  #panel-top-right {
+    grid-row: auto;
+    grid-template-rows: auto auto;
+  }
+  #panel-games { grid-row: auto; }
   body { overflow: auto; }
 }
 </style>
@@ -309,27 +356,23 @@ body {
     <div class="panel-header">Ratings Matrix</div>
     <div class="panel-body" id="ratings-body"><div class="loading-text">Loading ratings...</div></div>
   </section>
-  <section id="panel-games" class="panel">
-    <div class="panel-header">Recent Games <span class="blink">LIVE</span></div>
-    <div class="panel-body" id="games-body"><div class="loading-text">Loading games...</div></div>
-  </section>
   <section id="panel-charts" class="panel">
     <div class="panel-header">
       Rating History
       <div class="chart-controls">
         <div id="chart-tabs">
-          <span class="tab active" data-format="chess_bullet">BULLET</span>
+          <span class="tab" data-format="chess_bullet">BULLET</span>
           <span class="tab" data-format="chess_blitz">BLITZ</span>
-          <span class="tab" data-format="chess_rapid">RAPID</span>
+          <span class="tab active" data-format="chess_rapid">RAPID</span>
           <span class="tab" data-format="chess_daily">DAILY</span>
         </div>
         <span class="chart-controls-separator">|</span>
         <div id="chart-range-tabs">
           <span class="tab" data-range="1">1D</span>
           <span class="tab" data-range="7">1W</span>
-          <span class="tab" data-range="30">1M</span>
+          <span class="tab active" data-range="30">1M</span>
           <span class="tab" data-range="365">1Y</span>
-          <span class="tab active" data-range="all">ALL</span>
+          <span class="tab" data-range="all">ALL</span>
         </div>
       </div>
     </div>
@@ -337,9 +380,19 @@ body {
       <canvas id="rating-chart"></canvas>
     </div>
   </section>
-  <section id="panel-performance" class="panel">
-    <div class="panel-header">Performance Summary</div>
-    <div class="panel-body" id="performance-body"><div class="loading-text">Loading stats...</div></div>
+  <div id="panel-top-right">
+    <section id="panel-overview" class="panel">
+      <div class="panel-header">Overview</div>
+      <div class="panel-body" id="overview-body"><div class="loading-text">Compiling overview...</div></div>
+    </section>
+    <section id="panel-performance" class="panel">
+      <div class="panel-header">Performance Summary</div>
+      <div class="panel-body" id="performance-body"><div class="loading-text">Loading stats...</div></div>
+    </section>
+  </div>
+  <section id="panel-games" class="panel">
+    <div class="panel-header">Recent Games <span class="blink">LIVE</span></div>
+    <div class="panel-body" id="games-body"><div class="loading-text">Loading games...</div></div>
   </section>
 </main>
 
@@ -364,6 +417,7 @@ const CACHE_VERSION = 'v2';
 const FORMATS = ['chess_bullet', 'chess_blitz', 'chess_rapid', 'chess_daily'];
 const FORMAT_LABELS = { chess_bullet: 'BULLET', chess_blitz: 'BLITZ', chess_rapid: 'RAPID', chess_daily: 'DAILY' };
 const PLAYER_COLORS = ['#00ff41', '#ffb700', '#58a6ff', '#ff6b6b', '#c084fc', '#34d399'];
+const OVERVIEW_WINDOWS = [1, 7, 14, 30];
 
 // ===== STATE =====
 const state = {
@@ -372,8 +426,8 @@ const state = {
   errors: [],
   lastRefresh: null,
   archivesLoading: false,
-  selectedChartFormat: 'chess_bullet',
-  selectedChartRange: 'all'
+  selectedChartFormat: 'chess_rapid',
+  selectedChartRange: '30'
 };
 
 let nextRefreshTime = Date.now() + REFRESH_INTERVAL_MS;
@@ -407,6 +461,179 @@ function formatDateTime(unixSec) {
   const hr = String(d.getHours()).padStart(2, '0');
   const mi = String(d.getMinutes()).padStart(2, '0');
   return mo + '/' + da + ' ' + hr + ':' + mi;
+}
+
+function formatModeLabel(formatKey) {
+  return FORMAT_LABELS[formatKey] || String(formatKey || '').replace('chess_', '').toUpperCase();
+}
+
+function formatPeriodLabel(days) {
+  if (days === 1) return 'the last day';
+  if (days === 7) return 'the last week';
+  if (days === 14) return 'the last 2 weeks';
+  if (days === 30) return 'the last month';
+  return 'the last ' + days + ' days';
+}
+
+function hashString(str) {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRandom(seedText) {
+  let seed = hashString(seedText);
+  return function() {
+    seed += 0x6D2B79F5;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleWithRandom(items, random) {
+  const shuffled = items.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    const temp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = temp;
+  }
+  return shuffled;
+}
+
+function summarizeEntries(entries) {
+  let wins = 0, losses = 0, draws = 0;
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i].result === 'win') wins++;
+    else if (isLoss(entries[i].result)) losses++;
+    else draws++;
+  }
+  const first = entries[0];
+  const last = entries[entries.length - 1];
+  const total = entries.length;
+  return {
+    wins: wins,
+    losses: losses,
+    draws: draws,
+    total: total,
+    winRate: total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0',
+    delta: total > 0 ? last.rating - first.rating : 0,
+    startDate: first ? first.date : 0,
+    endDate: last ? last.date : 0
+  };
+}
+
+function getSortedFormatHistory(player, formatKey) {
+  if (!player || !player.ratingHistory || !player.ratingHistory[formatKey]) return [];
+  return player.ratingHistory[formatKey].slice().sort(function(a, b) { return a.date - b.date; });
+}
+
+function buildOverviewCandidates() {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const candidates = [];
+
+  for (const username of PLAYERS) {
+    const key = username.toLowerCase();
+    const player = state.players[key];
+    const stats = player && player.stats;
+
+    if (stats) {
+      let bestCurrentFormat = '';
+      let bestCurrentRating = -1;
+      let totalWins = 0, totalLosses = 0, totalDraws = 0;
+
+      for (const fmt of FORMATS) {
+        const fmtStats = stats[fmt];
+        if (fmtStats && fmtStats.last && fmtStats.last.rating > bestCurrentRating) {
+          bestCurrentRating = fmtStats.last.rating;
+          bestCurrentFormat = fmt;
+        }
+        if (fmtStats && fmtStats.record) {
+          totalWins += fmtStats.record.win || 0;
+          totalLosses += fmtStats.record.loss || 0;
+          totalDraws += fmtStats.record.draw || 0;
+        }
+      }
+
+      const lifetimeTotal = totalWins + totalLosses + totalDraws;
+      if (lifetimeTotal > 0 && bestCurrentFormat) {
+        candidates.push(
+          '<span class="overview-player">' + escapeHtml(username) + '</span> is strongest in <span class="overview-accent">' +
+          escapeHtml(formatModeLabel(bestCurrentFormat)) + '</span> right now at <span class="overview-good">' +
+          bestCurrentRating + '</span>, backed by a lifetime win rate of <span class="overview-good">' +
+          ((totalWins / lifetimeTotal) * 100).toFixed(1) + '%</span>.'
+        );
+      }
+
+      const puzzleHigh = stats.tactics && stats.tactics.highest ? stats.tactics.highest.rating : null;
+      const rushBest = stats.puzzle_rush && stats.puzzle_rush.best ? stats.puzzle_rush.best.score : null;
+      if (puzzleHigh || rushBest) {
+        candidates.push(
+          '<span class="overview-player">' + escapeHtml(username) + '</span> has a puzzle high of <span class="overview-accent">' +
+          (puzzleHigh || '-') + '</span> and a Puzzle Rush best of <span class="overview-good">' + (rushBest || '-') + '</span>.'
+        );
+      }
+    }
+
+    for (const fmt of FORMATS) {
+      const history = getSortedFormatHistory(player, fmt);
+      if (history.length < 3) continue;
+
+      for (let wi = 0; wi < OVERVIEW_WINDOWS.length; wi++) {
+        const days = OVERVIEW_WINDOWS[wi];
+        const cutoff = nowSec - days * 86400;
+        const windowEntries = history.filter(function(entry) { return entry.date >= cutoff; });
+        if (windowEntries.length < 3) continue;
+
+        const summary = summarizeEntries(windowEntries);
+        const modeLabel = formatModeLabel(fmt);
+        const periodLabel = formatPeriodLabel(days);
+
+        candidates.push(
+          '<span class="overview-player">' + escapeHtml(username) + '</span> has played <span class="overview-accent">' +
+          summary.total + '</span> <span class="overview-accent">' + escapeHtml(modeLabel) + '</span> games over <span class="overview-meta">' +
+          escapeHtml(periodLabel) + '</span>, with a <span class="overview-good">' + summary.winRate + '%</span> win rate.'
+        );
+
+        if (Math.abs(summary.delta) >= 10) {
+          const deltaClass = summary.delta >= 0 ? 'overview-good' : 'overview-bad';
+          const deltaText = summary.delta >= 0 ? '+' + summary.delta : String(summary.delta);
+          candidates.push(
+            '<span class="overview-player">' + escapeHtml(username) + '</span> moved <span class="' + deltaClass + '">' +
+            deltaText + '</span> rating points in <span class="overview-accent">' + escapeHtml(modeLabel) +
+            '</span> across <span class="overview-accent">' + summary.total + '</span> games over <span class="overview-meta">' +
+            escapeHtml(periodLabel) + '</span>.'
+          );
+        }
+
+        if (summary.wins >= 3) {
+          candidates.push(
+            '<span class="overview-player">' + escapeHtml(username) + '</span> went <span class="overview-good">' + summary.wins + '</span>-<span class="overview-bad">' +
+            summary.losses + '</span>-<span class="overview-accent">' + summary.draws + '</span> in <span class="overview-accent">' +
+            escapeHtml(modeLabel) + '</span> over <span class="overview-meta">' + escapeHtml(periodLabel) + '</span>.'
+          );
+        }
+      }
+
+      if (history.length >= 10) {
+        const monthCutoff = nowSec - 30 * 86400;
+        const monthEntries = history.filter(function(entry) { return entry.date >= monthCutoff; });
+        if (monthEntries.length >= 3) {
+          candidates.push(
+            '<span class="overview-player">' + escapeHtml(username) + '</span> has logged <span class="overview-accent">' + monthEntries.length +
+            '</span> tracked <span class="overview-accent">' + escapeHtml(formatModeLabel(fmt)) + '</span> games over <span class="overview-meta">the last month</span>.'
+          );
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -482,6 +709,7 @@ async function fetchProfilesAndStats() {
     }
     renderRoster();
     renderRatingsMatrix();
+    renderOverview();
     renderPerformance();
   }
 
@@ -507,7 +735,9 @@ async function fetchArchives() {
         state.players[key].recentGames = cachedGames.data;
         state.players[key].archivesLoaded = true;
         renderChart();
+        renderOverview();
         renderRecentGames();
+        renderPerformance();
         continue;
       }
 
@@ -556,7 +786,9 @@ async function fetchArchives() {
 
     // Render progressively after each player
     renderChart();
+    renderOverview();
     renderRecentGames();
+    renderPerformance();
   }
 
   state.archivesLoading = false;
@@ -711,7 +943,7 @@ function renderRecentGames() {
     }
   }
   allGames.sort(function(a, b) { return b.date - a.date; });
-  const display = allGames.slice(0, 50);
+  const display = allGames.slice(0, 18);
 
   if (display.length === 0) {
     el.innerHTML = '<div class="loading-text">Loading games...</div>';
@@ -835,61 +1067,95 @@ function renderChart() {
   chartInstance.update();
 }
 
+// ===== RENDER: OVERVIEW =====
+function renderOverview() {
+  const el = document.getElementById('overview-body');
+  const candidates = buildOverviewCandidates();
+
+  if (candidates.length === 0) {
+    el.innerHTML = '<div class="loading-text">Compiling overview...</div>';
+    return;
+  }
+
+  const seedText = new Date().toISOString().slice(0, 13);
+  const random = createSeededRandom(seedText);
+  const line = shuffleWithRandom(candidates, random)[0];
+  const html = '<div class="overview-body"><div class="overview-line">' + line + '</div></div>';
+  el.innerHTML = html;
+}
+
 // ===== RENDER: PERFORMANCE =====
 function renderPerformance() {
   const el = document.getElementById('performance-body');
   let html = '';
 
-  // Tactics
-  html += '<div class="perf-section"><div class="perf-title">TACTICS RATINGS</div>';
-  for (const username of PLAYERS) {
-    const key = username.toLowerCase();
-    const s = state.players[key] && state.players[key].stats;
-    if (!s || !s.tactics) continue;
-    const hi = s.tactics.highest ? s.tactics.highest.rating : '-';
-    const lo = s.tactics.lowest ? s.tactics.lowest.rating : '-';
-    html += '<div class="perf-row"><span class="perf-name">' + escapeHtml(truncate(username, 16)) +
-      '</span><span class="amber">' + hi + '</span><span class="dim"> / ' + lo + '</span></div>';
-  }
-  html += '</div>';
-
-  // Puzzle Rush
-  html += '<div class="perf-section"><div class="perf-title">PUZZLE RUSH BEST</div>';
-  for (const username of PLAYERS) {
-    const key = username.toLowerCase();
-    const s = state.players[key] && state.players[key].stats;
-    if (!s || !s.puzzle_rush || !s.puzzle_rush.best) continue;
-    const score = s.puzzle_rush.best.score;
-    const total = s.puzzle_rush.best.total_attempts;
-    html += '<div class="perf-row"><span class="perf-name">' + escapeHtml(truncate(username, 16)) +
-      '</span><span class="green">' + score + '</span><span class="dim"> / ' + total + '</span></div>';
-  }
-  html += '</div>';
-
-  // Win rates
   html += '<div class="perf-section"><div class="perf-title">WIN RATE (ALL FORMATS)</div>';
+  const winRows = [];
   for (const username of PLAYERS) {
     const key = username.toLowerCase();
     const s = state.players[key] && state.players[key].stats;
     if (!s) continue;
-    let w = 0, l = 0, d = 0;
+
+    let wins = 0, losses = 0, draws = 0;
     for (const fmt of FORMATS) {
       if (s[fmt] && s[fmt].record) {
-        w += s[fmt].record.win || 0;
-        l += s[fmt].record.loss || 0;
-        d += s[fmt].record.draw || 0;
+        wins += s[fmt].record.win || 0;
+        losses += s[fmt].record.loss || 0;
+        draws += s[fmt].record.draw || 0;
       }
     }
-    const total = w + l + d;
-    const pct = total > 0 ? ((w / total) * 100).toFixed(1) : '0.0';
-    const barWidth = total > 0 ? Math.round((w / total) * 100) : 0;
-    html += '<div class="perf-row"><span class="perf-name">' + escapeHtml(truncate(username, 16)) +
-      '</span><span class="green">' + pct + '%</span>' +
-      '<div class="win-bar"><div class="win-bar-fill" style="width:' + barWidth + '%"></div></div></div>';
+
+    const total = wins + losses + draws;
+    const pctNum = total > 0 ? (wins / total) * 100 : 0;
+    const pct = pctNum.toFixed(1);
+    const barWidth = Math.round(pctNum);
+    winRows.push({ username: username, pctNum: pctNum, pct: pct, barWidth: barWidth, total: total });
+  }
+
+  winRows.sort(function(a, b) {
+    if (b.pctNum !== a.pctNum) return b.pctNum - a.pctNum;
+    if (b.total !== a.total) return b.total - a.total;
+    return a.username.localeCompare(b.username);
+  });
+
+  for (let i = 0; i < winRows.length; i++) {
+    const row = winRows[i];
+    html += '<div class="perf-row"><span class="perf-name">' + escapeHtml(truncate(row.username, 16)) +
+      '</span><span class="green">' + row.pct + '%</span>' +
+      '<div class="win-bar"><div class="win-bar-fill" style="width:' + row.barWidth + '%"></div></div></div>';
   }
   html += '</div>';
 
-  el.innerHTML = html || '<div class="loading-text">Loading...</div>';
+  html += '<div class="perf-section"><div class="perf-title">PUZZLES (HIGHEST / RUSH BEST)</div>';
+  const puzzleRows = [];
+  for (const username of PLAYERS) {
+    const key = username.toLowerCase();
+    const s = state.players[key] && state.players[key].stats;
+    if (!s) continue;
+
+    const puzzleHighVal = s.tactics && s.tactics.highest ? s.tactics.highest.rating : -1;
+    const rushBestVal = s.puzzle_rush && s.puzzle_rush.best ? s.puzzle_rush.best.score : -1;
+    if (puzzleHighVal < 0 && rushBestVal < 0) continue;
+    puzzleRows.push({ username: username, puzzleHighVal: puzzleHighVal, rushBestVal: rushBestVal });
+  }
+
+  puzzleRows.sort(function(a, b) {
+    if (b.puzzleHighVal !== a.puzzleHighVal) return b.puzzleHighVal - a.puzzleHighVal;
+    if (b.rushBestVal !== a.rushBestVal) return b.rushBestVal - a.rushBestVal;
+    return a.username.localeCompare(b.username);
+  });
+
+  for (let i = 0; i < puzzleRows.length; i++) {
+    const row = puzzleRows[i];
+    const puzzleHigh = row.puzzleHighVal >= 0 ? row.puzzleHighVal : '-';
+    const rushBest = row.rushBestVal >= 0 ? row.rushBestVal : '-';
+
+    html += '<div class="perf-row"><span class="perf-name">' + escapeHtml(truncate(row.username, 16)) +
+      '</span><span class="amber">' + puzzleHigh + '</span><span class="dim"> / </span><span class="green">' + rushBest + '</span></div>';
+  }
+  html += '</div>';
+
+  el.innerHTML = html || '<div class="loading-text">Loading stats...</div>';
 }
 
 // ===== HEADER & STATUS BAR =====
