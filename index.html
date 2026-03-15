@@ -73,7 +73,7 @@ body {
   grid-column: 3;
   grid-row: 1;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 1px;
   background: var(--border);
   min-height: 0;
@@ -566,7 +566,7 @@ function buildOverviewCandidates() {
           '<span class="overview-player">' + escapeHtml(username) + '</span> is strongest in <span class="overview-accent">' +
           escapeHtml(formatModeLabel(bestCurrentFormat)) + '</span> right now at <span class="overview-good">' +
           bestCurrentRating + '</span>, backed by a lifetime win rate of <span class="overview-good">' +
-          ((totalWins / lifetimeTotal) * 100).toFixed(1) + '%</span>.'
+          ((totalWins / lifetimeTotal) * 100).toFixed(1) + '%</span>'
         );
       }
 
@@ -575,7 +575,7 @@ function buildOverviewCandidates() {
       if (puzzleHigh || rushBest) {
         candidates.push(
           '<span class="overview-player">' + escapeHtml(username) + '</span> has a puzzle high of <span class="overview-accent">' +
-          (puzzleHigh || '-') + '</span> and a Puzzle Rush best of <span class="overview-good">' + (rushBest || '-') + '</span>.'
+          (puzzleHigh || '-') + '</span> and a Puzzle Rush best of <span class="overview-good">' + (rushBest || '-') + '</span>'
         );
       }
     }
@@ -597,7 +597,7 @@ function buildOverviewCandidates() {
         candidates.push(
           '<span class="overview-player">' + escapeHtml(username) + '</span> has played <span class="overview-accent">' +
           summary.total + '</span> <span class="overview-accent">' + escapeHtml(modeLabel) + '</span> games over <span class="overview-meta">' +
-          escapeHtml(periodLabel) + '</span>, with a <span class="overview-good">' + summary.winRate + '%</span> win rate.'
+          escapeHtml(periodLabel) + '</span>, with a <span class="overview-good">' + summary.winRate + '%</span> win rate'
         );
 
         if (Math.abs(summary.delta) >= 10) {
@@ -607,7 +607,7 @@ function buildOverviewCandidates() {
             '<span class="overview-player">' + escapeHtml(username) + '</span> moved <span class="' + deltaClass + '">' +
             deltaText + '</span> rating points in <span class="overview-accent">' + escapeHtml(modeLabel) +
             '</span> across <span class="overview-accent">' + summary.total + '</span> games over <span class="overview-meta">' +
-            escapeHtml(periodLabel) + '</span>.'
+            escapeHtml(periodLabel) + '</span>'
           );
         }
 
@@ -615,7 +615,7 @@ function buildOverviewCandidates() {
           candidates.push(
             '<span class="overview-player">' + escapeHtml(username) + '</span> went <span class="overview-good">' + summary.wins + '</span>-<span class="overview-bad">' +
             summary.losses + '</span>-<span class="overview-accent">' + summary.draws + '</span> in <span class="overview-accent">' +
-            escapeHtml(modeLabel) + '</span> over <span class="overview-meta">' + escapeHtml(periodLabel) + '</span>.'
+            escapeHtml(modeLabel) + '</span> over <span class="overview-meta">' + escapeHtml(periodLabel) + '</span>'
           );
         }
       }
@@ -626,7 +626,7 @@ function buildOverviewCandidates() {
         if (monthEntries.length >= 3) {
           candidates.push(
             '<span class="overview-player">' + escapeHtml(username) + '</span> has logged <span class="overview-accent">' + monthEntries.length +
-            '</span> tracked <span class="overview-accent">' + escapeHtml(formatModeLabel(fmt)) + '</span> games over <span class="overview-meta">the last month</span>.'
+            '</span> tracked <span class="overview-accent">' + escapeHtml(formatModeLabel(fmt)) + '</span> games over <span class="overview-meta">the last month</span>'
           );
         }
       }
@@ -734,6 +734,7 @@ async function fetchArchives() {
         state.players[key].ratingHistory = cached.data;
         state.players[key].recentGames = cachedGames.data;
         state.players[key].archivesLoaded = true;
+        renderRatingsMatrix();
         renderChart();
         renderOverview();
         renderRecentGames();
@@ -785,6 +786,7 @@ async function fetchArchives() {
     }
 
     // Render progressively after each player
+    renderRatingsMatrix();
     renderChart();
     renderOverview();
     renderRecentGames();
@@ -836,6 +838,7 @@ function renderRoster() {
 function renderRatingsMatrix() {
   const el = document.getElementById('ratings-body');
   const range = state.selectedChartRange;
+  const selectedFormat = state.selectedChartFormat;
   var cutoffSec = 0;
   if (range !== 'all') {
     var days = parseInt(range, 10);
@@ -847,7 +850,18 @@ function renderRatingsMatrix() {
     '<th>PLAYER</th><th>BULLET</th><th>BLITZ</th><th>RAPID</th><th>DAILY</th><th>W/L/D (' + rangeLabel + ')</th>' +
     '</tr></thead><tbody>';
 
-  for (const username of PLAYERS) {
+  const sortedPlayers = PLAYERS.slice().sort(function(a, b) {
+    const aKey = a.toLowerCase();
+    const bKey = b.toLowerCase();
+    const aStats = state.players[aKey] && state.players[aKey].stats;
+    const bStats = state.players[bKey] && state.players[bKey].stats;
+    const aRating = (aStats && aStats[selectedFormat] && aStats[selectedFormat].last) ? aStats[selectedFormat].last.rating : -1;
+    const bRating = (bStats && bStats[selectedFormat] && bStats[selectedFormat].last) ? bStats[selectedFormat].last.rating : -1;
+    if (bRating !== aRating) return bRating - aRating;
+    return a.localeCompare(b);
+  });
+
+  for (const username of sortedPlayers) {
     const key = username.toLowerCase();
     const p = state.players[key];
     if (!p || !p.stats) {
@@ -856,7 +870,7 @@ function renderRatingsMatrix() {
     }
     const s = p.stats;
     const hist = p.ratingHistory || {};
-    html += '<tr><td class="player-col">' + escapeHtml(truncate(username, 16)) + '</td>';
+    html += '<tr><td class="player-col">' + escapeHtml(username) + '</td>';
 
     let totalW = 0, totalL = 0, totalD = 0;
     let bestRating = 0, bestFormat = '';
@@ -1204,6 +1218,7 @@ function setupChartTabs() {
     for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
     e.target.classList.add('active');
     renderChart();
+    renderRatingsMatrix();
   });
   document.getElementById('chart-range-tabs').addEventListener('click', function(e) {
     const range = e.target.dataset.range;
